@@ -1,6 +1,6 @@
 # Spanish Car Market Intelligence — Data Platform Plan
 
-> Status: **DRAFT v0.1** · Date: 2026-09-29 · Owner: Miguel
+> Status: **DRAFT v0.2** (DGT layout and URLs verified on real data; see `demo/`) · Date: 2026-09-29 · Owner: Miguel
 > Scope: research, sources, data types, storage, data models, ETL/cleaning rules and use cases for the three data domains below.
 
 **Legend used in this document**
@@ -107,7 +107,7 @@ The DGT file covers **all vehicle types** (cars, motorcycles, trucks, etc.).
 | Microdatos de **Parque** (mensual / anual) | Monthly / yearly | Total vehicle fleet stock, national & provincial | [DGT page](https://www.dgt.es/menusecundario/dgt-en-cifras/dgt-en-cifras-resultados/dgt-en-cifras-detalle/Microdatos-de-parque-de-vehiculos-mensual/) |
 | Microdatos de **Distintivo Ambiental** (diarios) | Daily | Environmental label (0/ECO/B/C) per vehicle | [DGT page](https://www.dgt.es/menusecundario/dgt-en-cifras/dgt-en-cifras-resultados/dgt-en-cifras-detalle/Microdatos-de-Distintivo-Ambiental-de-Vehiculos-diarios/) |
 
-- Files are reached through the **"Acceso a listados"** link on each page → a listing page such as `.../matraba-listados/matriculaciones-automoviles-mensual.html` that links to the `.zip` files. ⚠️ I could not fetch that listing page (HTTP 500 at time of research), so **the exact ZIP file-name pattern is unverified**. The community project [rivasjm/matriculas-dgt](https://github.com/rivasjm/matriculas-dgt) scrapes this listing and downloads only missing daily ZIPs — a good reference implementation.
+- Files are reached through the **"Acceso a listados"** link on each page. ✅ **Verified URL pattern (daily):** listing page `https://www.dgt.es/menusecundario/dgt-en-cifras/matraba-listados/matriculaciones-automoviles-diario.html` links to `https://www.dgt.es/microdatos/salida/YYYY/M/vehiculos/matriculaciones/export_mat_YYYYMMDD.zip` (≈0.9 MB zipped, ≈6.7 MB text, ≈9k rows per working day; weekends/holidays are empty). The monthly listing page did not respond during testing. Note: dgt.es timed out for some custom User-Agent strings but not for the Python default. The community project [rivasjm/matriculas-dgt](https://github.com/rivasjm/matriculas-dgt) scrapes this listing and downloads only missing daily ZIPs — a good reference implementation.
 - **Bajas and Transferencias:** I have confirmed the pages exist, but **not their record layouts**. Each has its own "diseño de registro" PDF; read it before modelling them.
 - **Licence:** datos.gob.es cites its legal notice; the community mirror states CC BY 4.0. ⚠️ Confirm on the DGT page and **credit DGT** in outputs.
 - **Record layout PDF (official):** [`MATRICULACIONES_MATRABA.pdf`](https://sedeapl.dgt.gob.es/IEST_INTER/pdfs/disenoRegistro/vehiculos/matriculaciones/MATRICULACIONES_MATRABA.pdf). I could not machine-read it (image-based PDF); the field list below comes from the community project and **must be checked against the PDF**, especially the **code lists** (fuel, service, body, class), which I have *not* verified.
@@ -123,7 +123,7 @@ The DGT file covers **all vehicle types** (cars, motorcycles, trucks, etc.).
 | Record length | 714 characters, 69 fields |
 | Header | First line is a text banner ("Vehículos matriculados. Letras de la serie…"), **not** column names → skip |
 | Dates | `DDMMYYYY` (8 chars) |
-| VIN | `BASTIDOR_ITV` — only first 8 chars valid, rest `*` (policy since 2025-02-01) |
+| VIN | `BASTIDOR_ITV` — only the first ~9–11 chars are visible, the rest is `*` (policy since 2025-02-01; ✅ verified on a real file) |
 
 #### Field layout (69 fields, in file order, lengths in chars) ✅
 
@@ -196,8 +196,8 @@ Notes:
 | VIN | Keep first 8 chars only in a `vin_prefix` column; **do not** use as a key; never store `*` padding |
 | Brand / model text | Free text with variants (`VOLKSWAGEN`, `VW`, `SEAT`, `CUPRA`, model strings with suffixes). Build `dim_brand` + `brand_alias` and `dim_model` + `model_alias` tables; normalise to `UPPER(TRIM(unaccent(...)))`, map aliases manually, log unmapped values for review |
 | Version strings | Keep raw `VERSION_ITV` for detail; derive `model_family` (e.g. "Corolla") separately from marketing model names — expect mismatches with marketing/listing names |
-| Provinces | Map `COD_PROVINCIA_*` (2-digit INE) → `dim_geo`; join municipality via INE 5-digit code (`COD_MUNICIPIO_INE_VEH`) |
-| `COD_PROVINCIA_VEH` vs `COD_PROVINCIA_MAT` | Two different provinces (vehicle location vs registration office). Decide which is "where sold" — ❓ propose: `_VEH` (owner's location), keep both |
+| Provinces | ✅ Verified on real data: `COD_PROVINCIA_*` are **licence-plate letters** (`M`, `B`, `MA`, `IB`, `OU`…), *not* INE numbers. Map letters → province name; join municipality via the 5-digit INE code (`COD_MUNICIPIO_INE_VEH`) |
+| `COD_PROVINCIA_VEH` vs `COD_PROVINCIA_MAT` | Two different provinces (vehicle location vs registration office). ⚠️ **Measured on 8 days of real data: 95% of renting-fleet registrations are in Madrid**, so Madrid is 35% of new cars but 20% once `RENTING='S'` is excluded. "Where sold" analysis must exclude or separate renting |
 | New vs used | `IND_NUEVO_USADO` distinguishes new registrations from used vehicles registered (mostly imports). Analytics on "sales of new cars" must filter on it |
 | Company / rental / fleet registrations | `PERSONA_FISICA_JURIDICA`, `RENTING`, `SERVICIO` let us separate private buyers from companies, renting and rent-a-car. ⚠️ Tactical "self-registrations" (km 0) inflate a brand's *sales* — flag them where detectable |
 | Codes (fuel, body, service, class) | Load code-list tables from the official PDF into `ref.*`; do **not** guess mappings |

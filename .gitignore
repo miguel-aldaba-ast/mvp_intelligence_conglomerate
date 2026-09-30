@@ -1,0 +1,8 @@
+# demo artefacts that are downloaded / generated
+demo/data/raw/
+demo/data/*.sqlite
+demo/data/similarweb_ledger.json
+demo/out/
+__pycache__/
+.env
+demo/data/drivers/
